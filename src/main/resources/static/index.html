@@ -84,57 +84,6 @@
         }
 
         /* 消息样式 */
-        .message {
-            display: flex;
-            flex-direction: column;
-            max-width: 85%;
-        }
-        .message.user {
-            align-self: flex-end;
-        }
-        .message.assistant {
-            align-self: flex-start;
-        }
-        .message-header {
-            font-size: 12px;
-            color: #888;
-            margin-bottom: 4px;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-        .message.user .message-header {
-            justify-content: flex-end;
-        }
-        .mode-badge {
-            font-size: 11px;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-weight: 500;
-        }
-        .mode-badge.interpret {
-            background: #e8f4e8;
-            color: #2d7a2d;
-        }
-        .mode-badge.chat {
-            background: #e8f0f8;
-            color: #2d5a7a;
-        }
-        .message-content {
-            padding: 12px 16px;
-            border-radius: 12px;
-            line-height: 1.6;
-        }
-        .message.user .message-content {
-            background: #1a1a1a;
-            color: white;
-            border-bottom-right-radius: 4px;
-        }
-        .message.assistant .message-content {
-            background: #f7f7f7;
-            color: #333;
-            border-bottom-left-radius: 4px;
-        }
 
         /* Markdown 样式 */
         .message-content p { margin: 0 0 0.8em 0; }
@@ -181,11 +130,6 @@
         .message-content strong { font-weight: 600; }
 
         /* 光标效果 */
-        .streaming::after {
-            content: '▋';
-            animation: blink 1s step-end infinite;
-            margin-left: 2px;
-        }
         @keyframes blink {
             50% { opacity: 0; }
         }
@@ -340,9 +284,6 @@
             border-top: 1px solid #e5e5e5;
             display: none;
         }
-        .status-bar.visible {
-            display: block;
-        }
 
         /* 响应式 */
         @media (max-width: 640px) {
@@ -362,9 +303,7 @@
             .chat-container {
                 padding: 16px;
             }
-            .message {
-                max-width: 92%;
-            }
+
             .input-container {
                 padding: 12px 16px;
             }

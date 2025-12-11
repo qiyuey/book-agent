@@ -125,8 +125,6 @@ public class BookController {
         @Schema(description = "模式：interpret=解读模式，chat=问答模式", example = "interpret", allowableValues = {"interpret", "chat"})
         private String mode;
 
-        public BookRequest() {}
-
         public BookRequest(String question, String bookName, String threadId, String modelId, String mode) {
             this.question = question;
             this.bookName = bookName;
@@ -137,20 +135,14 @@ public class BookController {
     }
 
     /**
-     * 模型列表响应对象
-     */
-    @Getter
-    @Schema(description = "可用模型列表响应")
-    public static class ModelsResponse {
-        @Schema(description = "可用模型列表")
-        private final List<ModelConfig.ModelInfo> models;
-
-        @Schema(description = "默认模型ID")
-        private final String defaultModel;
-
-        public ModelsResponse(List<ModelConfig.ModelInfo> models, String defaultModel) {
-            this.models = models;
-            this.defaultModel = defaultModel;
+         * 模型列表响应对象
+         */
+        @Schema(description = "可用模型列表响应")
+        public record ModelsResponse(@Schema(description = "可用模型列表") List<ModelConfig.ModelInfo> models,
+                                     @Schema(description = "默认模型 ID") String defaultModel) {
+            public ModelsResponse(List<ModelConfig.ModelInfo> models, String defaultModel) {
+                this.models = models;
+                this.defaultModel = defaultModel;
+            }
         }
-    }
 }

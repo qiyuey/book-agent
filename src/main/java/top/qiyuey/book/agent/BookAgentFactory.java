@@ -103,8 +103,8 @@ public class BookAgentFactory {
      */
     private ChatModel createChatModel(String modelId) {
         DashScopeChatOptions options = DashScopeChatOptions.builder()
-                .withModel(modelId)
-                .withTemperature(0.7)
+                .model(modelId)
+                .temperature(0.7)
                 .build();
 
         return DashScopeChatModel.builder()
@@ -113,17 +113,4 @@ public class BookAgentFactory {
                 .build();
     }
 
-    /**
-     * 清除指定模型的缓存
-     */
-    public void clearCache(String modelId) {
-        agentCache.remove(modelId);
-    }
-
-    /**
-     * 清除所有缓存
-     */
-    public void clearAllCache() {
-        agentCache.clear();
-    }
 }

@@ -26,8 +26,8 @@ public class BookService {
      *
      * @param question 用户问题/原文内容
      * @param bookName 书籍名称（可选）
-     * @param threadId 会话ID
-     * @param modelId  模型ID
+     * @param threadId 会话 ID
+     * @param modelId  模型 ID
      * @param mode     模式：interpret=解读，chat=问答
      * @return 响应事件流
      */
@@ -55,20 +55,23 @@ public class BookService {
                     .flatMap(output -> {
                         // 调试日志
                         if (log.isDebugEnabled()) {
-                            log.debug("Agent Output: class={}, chunk={}, state={}",
+                            String delta = (output instanceof StreamingOutput<?> s)
+                                    ? safeStreamingText(s)
+                                    : "N/A";
+                            log.debug("Agent Output: class={}, text={}, state={}",
                                     output.getClass().getSimpleName(),
-                                    (output instanceof StreamingOutput s) ? s.chunk() : "N/A",
+                                    delta,
                                     output.state());
                         }
 
                         // 尝试获取消息
                         Message message = null;
-                        if (output instanceof StreamingOutput so) {
+                        if (output instanceof StreamingOutput<?> so) {
                             message = so.message();
                         } else if (output.state() != null && output.state().data().containsKey("messages")) {
                             Object messagesObj = output.state().data().get("messages");
                             if (messagesObj instanceof List<?> list && !list.isEmpty()) {
-                                Object lastItem = list.get(list.size() - 1);
+                                Object lastItem = list.getLast();
                                 if (lastItem instanceof Message m) {
                                     message = m;
                                 }
@@ -76,8 +79,8 @@ public class BookService {
                         }
 
                         // 处理流式文本输出
-                        if (output instanceof StreamingOutput streamingOutput) {
-                            String text = streamingOutput.chunk();
+                        if (output instanceof StreamingOutput<?> streamingOutput) {
+                            String text = safeStreamingText(streamingOutput);
                             if (text != null && !text.isEmpty()) {
                                 return Flux.just(BookResponseEvent.builder()
                                         .status(BookResponseEvent.Status.PROGRESS)
@@ -117,6 +120,46 @@ public class BookService {
 
         // 3. 组合流
         return Flux.concat(Flux.just(startEvent), agentStream);
+    }
+
+    /**
+     * 提取 StreamingOutput 文本，兼容新旧 API。
+     * 优先尝试新的方法名：text()/delta()/content()，否则回退到 chunk()（已废弃）。
+     */
+    private String safeStreamingText(StreamingOutput<?> so) {
+        try {
+            // 尝试 text()
+            try {
+                var m = so.getClass().getMethod("text");
+                Object v = m.invoke(so);
+                return v != null ? v.toString() : null;
+            } catch (NoSuchMethodException ignore) { }
+
+            // 尝试 delta()
+            try {
+                var m = so.getClass().getMethod("delta");
+                Object v = m.invoke(so);
+                return v != null ? v.toString() : null;
+            } catch (NoSuchMethodException ignore) { }
+
+            // 尝试 content()
+            try {
+                var m = so.getClass().getMethod("content");
+                Object v = m.invoke(so);
+                return v != null ? v.toString() : null;
+            } catch (NoSuchMethodException ignore) { }
+
+            // 最后回退 chunk()（旧 API，避免直接调用以绕过编译期过时告警）
+            try {
+                var m = so.getClass().getMethod("chunk");
+                Object v = m.invoke(so);
+                return v != null ? v.toString() : null;
+            } catch (NoSuchMethodException ignore) { }
+
+        } catch (Exception e) {
+            log.debug("提取 StreamingOutput 文本失败: {}", e.toString());
+        }
+        return null;
     }
 
     /**

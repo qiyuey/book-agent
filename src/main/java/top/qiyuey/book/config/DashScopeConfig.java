@@ -13,7 +13,7 @@ import org.springframework.context.annotation.Configuration;
 public class DashScopeConfig {
 
     /**
-     * Reads API key from Spring configuration or environment.
+     * Reads an API key from a Spring configuration or environment.
      * Priority: spring.ai.dashscope.api-key -> env AI_DASHSCOPE_API_KEY -> env DASHSCOPE_API_KEY
      */
     @Bean
@@ -26,7 +26,7 @@ public class DashScopeConfig {
                 : (aiEnvApiKey != null ? aiEnvApiKey : dashscopeEnvApiKey);
 
         if (apiKey == null || apiKey.isBlank()) {
-            // Build without key will fail later at runtime; fail fast with a clear message.
+            // Build without a key will fail later at runtime; fail fast with a clear message.
             throw new IllegalStateException("DashScope API key is not configured. Please set 'spring.ai.dashscope.api-key' or environment variable AI_DASHSCOPE_API_KEY/DASHSCOPE_API_KEY.");
         }
 
