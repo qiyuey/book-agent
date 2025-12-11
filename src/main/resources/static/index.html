@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>书籍阅读助手</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+            color: #333;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            max-width: 1000px;
+            margin: 0 auto;
+            width: 100%;
+            background: white;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+
+        /* 头部 */
+        .header {
+            padding: 16px 20px;
+            border-bottom: 1px solid #e5e5e5;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #1a1a1a;
+        }
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .header-controls select {
+            padding: 6px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            background: white;
+            outline: none;
+        }
+        .header-controls select:focus {
+            border-color: #666;
+        }
+        .book-name-input {
+            padding: 6px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            width: 160px;
+            outline: none;
+        }
+        .book-name-input:focus {
+            border-color: #666;
+        }
+
+        /* 对话区域 */
+        .chat-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        /* 消息样式 */
+        .message {
+            display: flex;
+            flex-direction: column;
+            max-width: 85%;
+        }
+        .message.user {
+            align-self: flex-end;
+        }
+        .message.assistant {
+            align-self: flex-start;
+        }
+        .message-header {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .message.user .message-header {
+            justify-content: flex-end;
+        }
+        .mode-badge {
+            font-size: 11px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+        .mode-badge.interpret {
+            background: #e8f4e8;
+            color: #2d7a2d;
+        }
+        .mode-badge.chat {
+            background: #e8f0f8;
+            color: #2d5a7a;
+        }
+        .message-content {
+            padding: 12px 16px;
+            border-radius: 12px;
+            line-height: 1.6;
+        }
+        .message.user .message-content {
+            background: #1a1a1a;
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+        .message.assistant .message-content {
+            background: #f7f7f7;
+            color: #333;
+            border-bottom-left-radius: 4px;
+        }
+
+        /* Markdown 样式 */
+        .message-content p { margin: 0 0 0.8em 0; }
+        .message-content p:last-child { margin-bottom: 0; }
+        .message-content h1, .message-content h2, .message-content h3 {
+            margin: 1.2em 0 0.5em 0;
+            font-weight: 600;
+        }
+        .message-content h1:first-child, .message-content h2:first-child, .message-content h3:first-child {
+            margin-top: 0;
+        }
+        .message-content ul, .message-content ol {
+            margin: 0.5em 0;
+            padding-left: 1.5em;
+        }
+        .message-content li { margin-bottom: 0.3em; }
+        .message-content code {
+            background: #e5e5e5;
+            padding: 2px 5px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        .message.user .message-content code {
+            background: #333;
+        }
+        .message-content pre {
+            background: #1a1a1a;
+            color: #e5e5e5;
+            padding: 12px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 0.8em 0;
+        }
+        .message-content pre code {
+            background: none;
+            padding: 0;
+        }
+        .message-content blockquote {
+            border-left: 3px solid #ccc;
+            margin: 0.8em 0;
+            padding-left: 12px;
+            color: #666;
+        }
+        .message-content strong { font-weight: 600; }
+
+        /* 光标效果 */
+        .streaming::after {
+            content: '▋';
+            animation: blink 1s step-end infinite;
+            margin-left: 2px;
+        }
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+
+        /* 欢迎界面 */
+        .welcome {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+            text-align: center;
+        }
+        .welcome h2 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #1a1a1a;
+        }
+        .welcome p {
+            color: #666;
+            margin-bottom: 24px;
+        }
+        .examples-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+            width: 100%;
+            max-width: 600px;
+        }
+        .example-card {
+            background: #f7f7f7;
+            border: 1px solid #e5e5e5;
+            padding: 12px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: left;
+        }
+        .example-card:hover {
+            background: #f0f0f0;
+            border-color: #ccc;
+        }
+        .example-card .book {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 4px;
+        }
+        .example-card .text {
+            font-size: 14px;
+            color: #333;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        /* 输入区域 */
+        .input-container {
+            padding: 16px 20px;
+            border-top: 1px solid #e5e5e5;
+            background: white;
+        }
+        .mode-tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 12px;
+        }
+        .mode-tab {
+            padding: 8px 16px;
+            border: none;
+            background: #f0f0f0;
+            color: #666;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+        .mode-tab:hover {
+            background: #e5e5e5;
+        }
+        .mode-tab.active {
+            background: #1a1a1a;
+            color: white;
+        }
+        .mode-tab .shortcut {
+            font-size: 11px;
+            color: #999;
+            margin-left: 6px;
+        }
+        .mode-tab.active .shortcut {
+            color: #888;
+        }
+        .input-wrapper {
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+        }
+        .input-wrapper textarea {
+            flex: 1;
+            padding: 12px 16px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 15px;
+            resize: none;
+            outline: none;
+            min-height: 48px;
+            max-height: 200px;
+            line-height: 1.5;
+        }
+        .input-wrapper textarea:focus {
+            border-color: #999;
+        }
+        .input-wrapper textarea::placeholder {
+            color: #999;
+        }
+        .send-btn {
+            padding: 12px 20px;
+            background: #1a1a1a;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+            white-space: nowrap;
+        }
+        .send-btn:hover {
+            background: #333;
+        }
+        .send-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .input-hint {
+            font-size: 12px;
+            color: #999;
+            margin-top: 8px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        /* 状态提示 */
+        .status-bar {
+            padding: 8px 20px;
+            font-size: 13px;
+            color: #666;
+            background: #fafafa;
+            border-top: 1px solid #e5e5e5;
+            display: none;
+        }
+        .status-bar.visible {
+            display: block;
+        }
+
+        /* 响应式 */
+        @media (max-width: 640px) {
+            .header {
+                padding: 12px 16px;
+            }
+            .header h1 {
+                font-size: 1.1rem;
+            }
+            .header-controls {
+                width: 100%;
+                justify-content: space-between;
+            }
+            .book-name-input {
+                flex: 1;
+            }
+            .chat-container {
+                padding: 16px;
+            }
+            .message {
+                max-width: 92%;
+            }
+            .input-container {
+                padding: 12px 16px;
+            }
+            .mode-tabs {
+                gap: 2px;
+            }
+            .mode-tab {
+                padding: 8px 12px;
+                font-size: 13px;
+            }
+            .mode-tab .shortcut {
+                display: none;
+            }
+            .examples-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <div class="header">
+            <h1>书籍阅读助手</h1>
+            <div class="header-controls">
+                <input type="text" id="bookNameInput" class="book-name-input" placeholder="书籍名称（可选）" maxlength="100">
+                <select id="modelSelect">
+                    <option value="">加载中...</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="chat-container" id="chatContainer">
+            <div class="welcome" id="welcomeScreen">
+                <h2>开始阅读之旅</h2>
+                <p>选择一种模式，粘贴原文或提出问题</p>
+                <div class="examples-grid">
+                    <div class="example-card" onclick="setExample('毛泽东选集', '实践、认识、再实践、再认识，这种形式，循环往复以至无穷，而实践和认识之每一循环的内容，都比较地进到了高一级的程度。')">
+                        <div class="book">毛泽东选集</div>
+                        <div class="text">实践、认识、再实践、再认识，这种形式，循环往复以至无穷...</div>
+                    </div>
+                    <div class="example-card" onclick="setExample('孙子兵法', '知彼知己，百战不殆；不知彼而知己，一胜一负；不知彼不知己，每战必殆。')">
+                        <div class="book">孙子兵法</div>
+                        <div class="text">知彼知己，百战不殆；不知彼而知己，一胜一负...</div>
+                    </div>
+                    <div class="example-card" onclick="setExample('原则', '痛苦+反思=进步。这是我一生中学到的最重要的一课。')">
+                        <div class="book">原则</div>
+                        <div class="text">痛苦+反思=进步。这是我一生中学到的最重要的一课。</div>
+                    </div>
+                    <div class="example-card" onclick="setExample('道德经', '天下大事，必作于细；天下难事，必作于易。')">
+                        <div class="book">道德经</div>
+                        <div class="text">天下大事，必作于细；天下难事，必作于易。</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="status-bar" id="statusBar"></div>
+
+        <div class="input-container">
+            <div class="mode-tabs">
+                <button class="mode-tab active" data-mode="interpret" onclick="setMode('interpret')">
+                    解读<span class="shortcut">⌘1</span>
+                </button>
+                <button class="mode-tab" data-mode="chat" onclick="setMode('chat')">
+                    问答<span class="shortcut">⌘2</span>
+                </button>
+            </div>
+            <div class="input-wrapper">
+                <textarea id="inputArea" placeholder="粘贴原文，深度解读..." rows="1" onkeydown="handleKeyDown(event)" oninput="autoResize(this)"></textarea>
+                <button class="send-btn" id="sendBtn" onclick="sendMessage()">发送</button>
+            </div>
+            <div class="input-hint">
+                <span id="charCount">0/20000</span>
+                <span>⌘+Enter 发送</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 状态
+        let currentMode = 'interpret'; // 'interpret' 或 'chat'
+        let threadId = generateThreadId();
+        let isStreaming = false;
+        let controller = null;
+        let messages = []; // 对话历史
+
+        // DOM 元素
+        const inputArea = document.getElementById('inputArea');
+        const bookNameInput = document.getElementById('bookNameInput');
+        const modelSelect = document.getElementById('modelSelect');
+        const chatContainer = document.getElementById('chatContainer');
+        const welcomeScreen = document.getElementById('welcomeScreen');
+        const statusBar = document.getElementById('statusBar');
+        const sendBtn = document.getElementById('sendBtn');
+        const charCount = document.getElementById('charCount');
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            loadModels();
+            inputArea.focus();
+        });
+
+        // 生成会话ID
+        function generateThreadId() {
+            return 'thread-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+        }
+
+        // 加载模型列表
+        async function loadModels() {
+            try {
+                const response = await fetch('/api/book/models');
+                const data = await response.json();
+                modelSelect.innerHTML = '';
+                data.models.forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = model.id;
+                    option.textContent = model.name;
+                    option.title = model.description;
+                    if (model.id === data.defaultModel) option.selected = true;
+                    modelSelect.appendChild(option);
+                });
+            } catch (e) {
+                console.error('加载模型列表失败:', e);
+                modelSelect.innerHTML = '<option value="">加载失败</option>';
+            }
+        }
+
+        // 模式切换
+        function setMode(mode) {
+            currentMode = mode;
+            document.querySelectorAll('.mode-tab').forEach(tab => {
+                tab.classList.toggle('active', tab.dataset.mode === mode);
+            });
+
+            if (mode === 'interpret') {
+                inputArea.placeholder = '粘贴原文，深度解读...';
+            } else {
+                inputArea.placeholder = '输入你的问题...';
+            }
+            inputArea.focus();
+        }
+
+        // 设置示例
+        function setExample(bookName, text) {
+            bookNameInput.value = bookName;
+            inputArea.value = text;
+            setMode('interpret');
+            autoResize(inputArea);
+            updateCharCount();
+            inputArea.focus();
+        }
+
+        // 自动调整输入框高度
+        function autoResize(el) {
+            el.style.height = 'auto';
+            el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+            updateCharCount();
+        }
+
+        // 更新字符计数
+        function updateCharCount() {
+            const count = inputArea.value.length;
+            charCount.textContent = `${count}/20000`;
+            charCount.style.color = count > 18000 ? '#e74c3c' : count > 15000 ? '#f39c12' : '#999';
+        }
+
+        // 键盘事件
+        function handleKeyDown(event) {
+            // Cmd/Ctrl + Enter 发送
+            if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+                event.preventDefault();
+                sendMessage();
+            }
+            // Cmd/Ctrl + 1/2 切换模式
+            if ((event.ctrlKey || event.metaKey) && (event.key === '1' || event.key === '2')) {
+                event.preventDefault();
+                setMode(event.key === '1' ? 'interpret' : 'chat');
+            }
+        }
+
+        // 发送消息
+        async function sendMessage() {
+            const text = inputArea.value.trim();
+            if (!text || isStreaming) return;
+
+            // 隐藏欢迎界面
+            if (welcomeScreen) {
+                welcomeScreen.style.display = 'none';
+            }
+
+            // 添加用户消息
+            const userMsg = {
+                role: 'user',
+                content: text,
+                mode: currentMode,
+                bookName: bookNameInput.value.trim()
+            };
+            messages.push(userMsg);
+            renderMessage(userMsg);
+
+            // 清空输入
+            inputArea.value = '';
+            autoResize(inputArea);
+            updateCharCount();
+
+            // 开始流式响应
+            isStreaming = true;
+            sendBtn.disabled = true;
+            controller = new AbortController();
+
+            // 创建助手消息容器
+            const assistantMsg = {
+                role: 'assistant',
+                content: '',
+                mode: currentMode
+            };
+            const msgEl = renderMessage(assistantMsg, true);
+            const contentEl = msgEl.querySelector('.message-content');
+
+            setStatus('正在思考...');
+
+            try {
+                const response = await fetch('/api/book/ask', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        question: text,
+                        bookName: userMsg.bookName || null,
+                        modelId: modelSelect.value,
+                        threadId: threadId,
+                        mode: currentMode
+                    }),
+                    signal: controller.signal
+                });
+
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                let fullContent = '';
+
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const parts = buffer.split('\n\n');
+                    buffer = parts.pop();
+
+                    for (const part of parts) {
+                        const { content, isProgress } = parseSSE(part);
+                        if (content && isProgress) {
+                            fullContent += content;
+                            contentEl.innerHTML = marked.parse(fullContent);
+                            chatContainer.scrollTop = chatContainer.scrollHeight;
+                        }
+                    }
+                }
+
+                // 完成
+                contentEl.classList.remove('streaming');
+                assistantMsg.content = fullContent;
+                messages.push(assistantMsg);
+                setStatus('');
+
+            } catch (e) {
+                if (e.name === 'AbortError') {
+                    setStatus('已取消');
+                } else {
+                    contentEl.innerHTML = `<span style="color:#e74c3c">错误: ${e.message}</span>`;
+                    setStatus('');
+                }
+                contentEl.classList.remove('streaming');
+            } finally {
+                isStreaming = false;
+                sendBtn.disabled = false;
+                controller = null;
+            }
+        }
+
+        // 解析 SSE
+        function parseSSE(message) {
+            const lines = message.split('\n');
+            let eventType = null;
+            let data = null;
+
+            for (const line of lines) {
+                if (line.startsWith('event:')) {
+                    eventType = line.substring(6).trim();
+                } else if (line.startsWith('data:')) {
+                    try {
+                        data = JSON.parse(line.substring(5).trim());
+                    } catch (e) {
+                        data = { content: line.substring(5).trim() };
+                    }
+                }
+            }
+
+            return {
+                content: data?.content || '',
+                isProgress: eventType === 'PROGRESS' || eventType === 'RESULT'
+            };
+        }
+
+        // 渲染消息
+        function renderMessage(msg, isStreaming = false) {
+            const div = document.createElement('div');
+            div.className = `message ${msg.role}`;
+
+            const modeLabel = msg.mode === 'interpret' ? '解读' : '问答';
+            const modeClass = msg.mode === 'interpret' ? 'interpret' : 'chat';
+
+            div.innerHTML = `
+                <div class="message-header">
+                    ${msg.role === 'user' ? '' : `<span class="mode-badge ${modeClass}">${modeLabel}</span>`}
+                    <span>${msg.role === 'user' ? '你' : '助手'}${msg.bookName ? ` · ${msg.bookName}` : ''}</span>
+                </div>
+                <div class="message-content ${isStreaming ? 'streaming' : ''}">
+                    ${msg.role === 'user' ? escapeHtml(msg.content) : (msg.content ? marked.parse(msg.content) : '')}
+                </div>
+            `;
+
+            chatContainer.appendChild(div);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            return div;
+        }
+
+        // HTML 转义
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // 设置状态
+        function setStatus(text) {
+            if (text) {
+                statusBar.textContent = text;
+                statusBar.classList.add('visible');
+            } else {
+                statusBar.classList.remove('visible');
+            }
+        }
+
+        // 新对话
+        function newConversation() {
+            messages = [];
+            threadId = generateThreadId();
+            chatContainer.innerHTML = '';
+            if (welcomeScreen) {
+                chatContainer.appendChild(welcomeScreen);
+                welcomeScreen.style.display = 'flex';
+            }
+            inputArea.focus();
+        }
+    </script>
+</body>
+</html>

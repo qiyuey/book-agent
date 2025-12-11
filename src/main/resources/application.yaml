@@ -1,0 +1,32 @@
+spring:
+  application:
+    name: demo-agent
+  docker:
+    compose:
+      lifecycle-management: start-only
+  ai:
+    dashscope:
+      api-key: ${DASHSCOPE_API_KEY:${AI_DASHSCOPE_API_KEY}}
+      chat:
+        options:
+          model: ${DASHSCOPE_MODEL:qwen-max}
+          temperature: 0.7
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+server:
+  port: 8080
+
+# 可用模型配置
+app:
+  models:
+    default-model: qwen-max
+    available:
+      - id: qwen-max
+        name: Qwen Max
+        description: 通义千问旗舰模型，综合能力最强
+      - id: qwen-plus
+        name: Qwen Plus
+        description: 通义千问增强模型，性价比高
