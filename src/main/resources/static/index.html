@@ -328,10 +328,11 @@
         <div class="header">
             <h1>书籍阅读助手</h1>
             <div class="header-controls">
-                <input type="text" id="bookNameInput" class="book-name-input" placeholder="书籍名称（可选）" maxlength="100">
-                <select id="modelSelect">
+                <input type="text" id="bookNameInput" class="book-name-input" placeholder="书籍名称（可选）" maxlength="100" aria-label="书籍名称">
+                <select id="modelSelect" aria-label="模型选择">
                     <option value="">加载中...</option>
                 </select>
+                <button type="button" class="mode-tab" onclick="newConversation()" aria-label="新对话">新对话</button>
             </div>
         </div>
 
@@ -372,8 +373,8 @@
                 </button>
             </div>
             <div class="input-wrapper">
-                <textarea id="inputArea" placeholder="粘贴原文，深度解读..." rows="1" onkeydown="handleKeyDown(event)" oninput="autoResize(this)"></textarea>
-                <button class="send-btn" id="sendBtn" onclick="sendMessage()">发送</button>
+                <textarea id="inputArea" placeholder="粘贴原文，深度解读..." rows="1" aria-label="输入内容"></textarea>
+                <button class="send-btn" id="sendBtn" onclick="sendMessage()" aria-label="发送">发送</button>
             </div>
             <div class="input-hint">
                 <span id="charCount">0/20000</span>
@@ -403,28 +404,37 @@
         // 初始化
         document.addEventListener('DOMContentLoaded', () => {
             loadModels();
+            // 绑定输入框事件
+            inputArea.addEventListener('keydown', handleKeyDown);
+            inputArea.addEventListener('input', (e) => autoResize(e.target));
             inputArea.focus();
         });
 
         // 生成会话ID
         function generateThreadId() {
-            return 'thread-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+            return 'thread-' + Date.now() + '-' + Math.random().toString(36).slice(2, 11);
         }
 
         // 加载模型列表
         async function loadModels() {
             try {
                 const response = await fetch('/api/book/models');
+                /** @type {{models: Array<{id: string, name: string, description?: string}>, defaultModel: string}} */
                 const data = await response.json();
                 modelSelect.innerHTML = '';
-                data.models.forEach(model => {
+                const modelList = Array.isArray(data?.models) ? data.models : [];
+                const defaultModelId = data?.defaultModel || null;
+                modelList.forEach(model => {
                     const option = document.createElement('option');
                     option.value = model.id;
                     option.textContent = model.name;
-                    option.title = model.description;
-                    if (model.id === data.defaultModel) option.selected = true;
+                    if (model.description) option.title = model.description;
+                    if (defaultModelId && model.id === defaultModelId) option.selected = true;
                     modelSelect.appendChild(option);
                 });
+                if (modelList.length === 0) {
+                    modelSelect.innerHTML = '<option value="">无可用模型</option>';
+                }
             } catch (e) {
                 console.error('加载模型列表失败:', e);
                 modelSelect.innerHTML = '<option value="">加载失败</option>';
@@ -539,7 +549,12 @@
                     signal: controller.signal
                 });
 
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                if (!response.ok) {
+                    contentEl.innerHTML = `<span style="color:#e74c3c">错误: HTTP ${response.status}</span>`;
+                    setStatus('');
+                    contentEl.classList.remove('streaming');
+                    return; // finally 仍会执行
+                }
 
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
@@ -558,7 +573,7 @@
                         const { content, isProgress } = parseSSE(part);
                         if (content && isProgress) {
                             fullContent += content;
-                            contentEl.innerHTML = marked.parse(fullContent);
+                            contentEl.innerHTML = renderMarkdown(fullContent);
                             chatContainer.scrollTop = chatContainer.scrollHeight;
                         }
                     }
@@ -593,12 +608,12 @@
 
             for (const line of lines) {
                 if (line.startsWith('event:')) {
-                    eventType = line.substring(6).trim();
+                    eventType = line.slice(6).trim();
                 } else if (line.startsWith('data:')) {
                     try {
-                        data = JSON.parse(line.substring(5).trim());
+                        data = JSON.parse(line.slice(5).trim());
                     } catch (e) {
-                        data = { content: line.substring(5).trim() };
+                        data = { content: line.slice(5).trim() };
                     }
                 }
             }
@@ -623,7 +638,7 @@
                     <span>${msg.role === 'user' ? '你' : '助手'}${msg.bookName ? ` · ${msg.bookName}` : ''}</span>
                 </div>
                 <div class="message-content ${isStreaming ? 'streaming' : ''}">
-                    ${msg.role === 'user' ? escapeHtml(msg.content) : (msg.content ? marked.parse(msg.content) : '')}
+                    ${msg.role === 'user' ? escapeHtml(msg.content) : (msg.content ? renderMarkdown(msg.content) : '')}
                 </div>
             `;
 
@@ -637,6 +652,14 @@
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+
+        // Markdown 渲染（含兜底）
+        function renderMarkdown(content) {
+            if (!content) return '';
+            return (typeof window !== 'undefined' && window['marked'] && typeof window['marked'].parse === 'function')
+                ? window['marked'].parse(content)
+                : content;
         }
 
         // 设置状态
