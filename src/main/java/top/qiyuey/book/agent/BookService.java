@@ -4,21 +4,19 @@ import com.alibaba.cloud.ai.graph.RunnableConfig;
 import com.alibaba.cloud.ai.graph.agent.ReactAgent;
 import com.alibaba.cloud.ai.graph.streaming.StreamingOutput;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.messages.AssistantMessage;
-import org.springframework.ai.chat.messages.Message;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
-
-import java.util.List;
 
 @Slf4j
 @Service
 public class BookService {
 
     private final BookAgentFactory agentFactory;
+    private final ThreadService threadService;
 
-    public BookService(BookAgentFactory agentFactory) {
+    public BookService(BookAgentFactory agentFactory, ThreadService threadService) {
         this.agentFactory = agentFactory;
+        this.threadService = threadService;
     }
 
     /**
@@ -34,10 +32,15 @@ public class BookService {
     public Flux<BookResponseEvent> executeBookQuery(String question, String bookName, String threadId, String modelId, String mode) {
         RunnableConfig config = RunnableConfig.builder().threadId(threadId).build();
 
+        // 记录用户消息并更新线程信息
+        threadService.addMessage(threadId, "user", question);
+        threadService.updateThread(threadId, null, modelId, bookName);
+        threadService.generateTitleAsync(threadId, question, modelId);
+
         // 获取指定模型的 Agent
         ReactAgent agent = agentFactory.getAgent(modelId);
-
-        // 构建用户消息，根据模式不同处理
+        
+        // ... build user message
         String userMessage = buildUserMessage(question, bookName, mode);
 
         // 1. 起始事件
@@ -47,12 +50,15 @@ public class BookService {
                 .status(BookResponseEvent.Status.START)
                 .content(String.format("正在%s%s... (模型: %s)", modeLabel, bookInfo, modelId))
                 .build();
+        
+        StringBuilder fullResponse = new StringBuilder();
 
         // 2. Agent流转换
         Flux<BookResponseEvent> agentStream;
         try {
-            agentStream = agent.stream(userMessage, config)
+             agentStream = agent.stream(userMessage, config)
                     .flatMap(output -> {
+                        // ... existing logic ...
                         // 调试日志
                         if (log.isDebugEnabled()) {
                             String delta = (output instanceof StreamingOutput<?> s)
@@ -62,20 +68,6 @@ public class BookService {
                                     output.getClass().getSimpleName(),
                                     delta,
                                     output.state());
-                        }
-
-                        // 尝试获取消息
-                        Message message = null;
-                        if (output instanceof StreamingOutput<?> so) {
-                            message = so.message();
-                        } else if (output.state() != null && output.state().data().containsKey("messages")) {
-                            Object messagesObj = output.state().data().get("messages");
-                            if (messagesObj instanceof List<?> list && !list.isEmpty()) {
-                                Object lastItem = list.getLast();
-                                if (lastItem instanceof Message m) {
-                                    message = m;
-                                }
-                            }
                         }
 
                         // 处理流式文本输出
@@ -88,38 +80,36 @@ public class BookService {
                                         .build());
                             }
                         }
-                        // 处理非流式最终结果
-                        else {
-                            try {
-                                if (message instanceof AssistantMessage am) {
-                                    String content = am.getText();
-                                    if (content != null && !content.isEmpty()) {
-                                        return Flux.just(BookResponseEvent.builder()
-                                                .status(BookResponseEvent.Status.PROGRESS)
-                                                .content(content)
-                                                .build());
-                                    }
-                                }
-                            } catch (Exception e) {
-                                log.warn("提取非流式内容失败", e);
-                            }
-                        }
-
+                        // 忽略非流式最终结果，避免内容重复
+                        // Agent 结束时会返回包含完整历史记录的 State，如果再次提取最后一条消息，
+                        // 会导致前端先收到了流式片段，又收到一次完整内容，从而显示两次。
+                        
                         return Flux.empty();
                     });
         } catch (Exception e) {
-            log.error("创建 Agent 流失败", e);
-            return Flux.concat(
-                    Flux.just(startEvent),
-                    Flux.just(BookResponseEvent.builder()
-                            .status(BookResponseEvent.Status.ERROR)
-                            .content("处理失败: " + e.getMessage())
-                            .build())
-            );
+             // ...
+             log.error("创建 Agent 流失败", e);
+             return Flux.concat(
+                     Flux.just(startEvent),
+                     Flux.just(BookResponseEvent.builder()
+                             .status(BookResponseEvent.Status.ERROR)
+                             .content("处理失败: " + e.getMessage())
+                             .build())
+             );
         }
 
         // 3. 组合流
-        return Flux.concat(Flux.just(startEvent), agentStream);
+        return Flux.concat(Flux.just(startEvent), agentStream)
+                .doOnNext(event -> {
+                    if (event.getStatus() == BookResponseEvent.Status.PROGRESS && event.getContent() != null) {
+                        fullResponse.append(event.getContent());
+                    }
+                })
+                .doOnComplete(() -> {
+                     if (!fullResponse.isEmpty()) {
+                         threadService.addMessage(threadId, "assistant", fullResponse.toString());
+                     }
+                });
     }
 
     /**

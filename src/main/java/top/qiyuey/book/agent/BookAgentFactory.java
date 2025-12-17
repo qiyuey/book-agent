@@ -101,7 +101,7 @@ public class BookAgentFactory {
     /**
      * 创建指定模型的 ChatModel
      */
-    private ChatModel createChatModel(String modelId) {
+    public ChatModel createChatModel(String modelId) {
         DashScopeChatOptions options = DashScopeChatOptions.builder()
                 .model(modelId)
                 .temperature(0.7)

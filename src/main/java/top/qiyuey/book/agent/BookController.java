@@ -11,11 +11,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.util.StringUtils;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
@@ -41,10 +37,12 @@ public class BookController {
 
     private final BookService bookService;
     private final ModelConfig modelConfig;
+    private final ThreadService threadService;
 
-    public BookController(BookService bookService, ModelConfig modelConfig) {
+    public BookController(BookService bookService, ModelConfig modelConfig, ThreadService threadService) {
         this.bookService = bookService;
         this.modelConfig = modelConfig;
+        this.threadService = threadService;
     }
 
     /**
@@ -54,6 +52,30 @@ public class BookController {
     @GetMapping("/models")
     public ModelsResponse getAvailableModels() {
         return new ModelsResponse(modelConfig.getAvailable(), modelConfig.getDefaultModel());
+    }
+
+    @Operation(summary = "获取历史对话列表")
+    @GetMapping("/history")
+    public List<ThreadInfo> getHistory() {
+        return threadService.getAllThreads();
+    }
+
+    @Operation(summary = "获取对话详情")
+    @GetMapping("/history/{threadId}/messages")
+    public List<ThreadService.ChatMessage> getThreadMessages(@PathVariable String threadId) {
+        return threadService.getMessages(threadId);
+    }
+
+    @Operation(summary = "删除对话")
+    @DeleteMapping("/history/{threadId}")
+    public void deleteThread(@PathVariable String threadId) {
+        threadService.deleteThread(threadId);
+    }
+
+    @Operation(summary = "更新对话标题")
+    @PatchMapping("/history/{threadId}/title")
+    public void updateThreadTitle(@PathVariable String threadId, @RequestBody String title) {
+        threadService.updateThread(threadId, title, null, null);
     }
 
     /**
