@@ -5,7 +5,13 @@ import com.alibaba.cloud.ai.graph.agent.ReactAgent;
 import com.alibaba.cloud.ai.graph.streaming.StreamingOutput;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.web.reactive.function.client.WebClientRequestException;
 import reactor.core.publisher.Flux;
+
+import java.net.SocketException;
+import java.net.UnknownHostException;
+import java.time.Duration;
+import java.util.concurrent.TimeoutException;
 
 @Slf4j
 @Service
@@ -98,8 +104,9 @@ public class BookService {
              );
         }
 
-        // 3. 组合流
+        // 3. 组合流，添加超时和错误处理
         return Flux.concat(Flux.just(startEvent), agentStream)
+                .timeout(Duration.ofMinutes(3))
                 .doOnNext(event -> {
                     if (event.getStatus() == BookResponseEvent.Status.PROGRESS && event.getContent() != null) {
                         fullResponse.append(event.getContent());
@@ -109,7 +116,69 @@ public class BookService {
                      if (!fullResponse.isEmpty()) {
                          threadService.addMessage(threadId, "assistant", fullResponse.toString());
                      }
+                })
+                .onErrorResume(ex -> {
+                    log.error("Agent 流处理异常", ex);
+                    String errorMessage = buildUserFriendlyErrorMessage(ex);
+                    return Flux.just(BookResponseEvent.builder()
+                            .status(BookResponseEvent.Status.ERROR)
+                            .content(errorMessage)
+                            .build());
                 });
+    }
+
+    /**
+     * 将异常转换为用户友好的错误消息
+     */
+    private String buildUserFriendlyErrorMessage(Throwable ex) {
+        Throwable cause = ex;
+        while (cause.getCause() != null && cause.getCause() != cause) {
+            cause = cause.getCause();
+        }
+
+        // 超时
+        if (ex instanceof TimeoutException || cause instanceof TimeoutException) {
+            return "请求超时，请稍后重试。如果问题持续存在，可能是服务繁忙。";
+        }
+
+        // 网络连接问题
+        if (ex instanceof WebClientRequestException || cause instanceof WebClientRequestException) {
+            String message = cause.getMessage();
+            if (message != null && message.contains("Connection reset")) {
+                return "网络连接被重置，可能是代理配置问题或网络不稳定，请检查网络后重试。";
+            }
+            if (message != null && message.contains("Connection refused")) {
+                return "无法连接到 AI 服务，请检查网络配置后重试。";
+            }
+            return "网络连接异常，请检查网络后重试。";
+        }
+
+        // Socket 异常
+        if (cause instanceof SocketException) {
+            return "网络连接异常：" + cause.getMessage() + "。请检查网络或代理配置。";
+        }
+
+        // DNS 解析失败
+        if (cause instanceof UnknownHostException) {
+            return "无法解析服务器地址，请检查网络连接。";
+        }
+
+        // API 错误（如认证失败、配额不足等）
+        String message = ex.getMessage();
+        if (message != null) {
+            if (message.contains("401") || message.contains("Unauthorized")) {
+                return "API 认证失败，请检查 API Key 配置。";
+            }
+            if (message.contains("429") || message.contains("rate limit")) {
+                return "请求频率过高，请稍后重试。";
+            }
+            if (message.contains("500") || message.contains("502") || message.contains("503")) {
+                return "AI 服务暂时不可用，请稍后重试。";
+            }
+        }
+
+        // 默认错误消息
+        return "处理请求时发生错误：" + (message != null ? message : ex.getClass().getSimpleName());
     }
 
     /**

@@ -1,12 +1,10 @@
 package top.qiyuey.book.agent;
 
-import com.alibaba.cloud.ai.dashscope.api.DashScopeApi;
-import com.alibaba.cloud.ai.dashscope.chat.DashScopeChatModel;
-import com.alibaba.cloud.ai.dashscope.chat.DashScopeChatOptions;
 import com.alibaba.cloud.ai.graph.agent.ReactAgent;
 import com.alibaba.cloud.ai.graph.checkpoint.BaseCheckpointSaver;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.stereotype.Component;
+import top.qiyuey.book.config.provider.ChatModelRegistry;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -60,23 +58,19 @@ public class BookAgentFactory {
             > 用一句现代大白话，总结这段原文的核心智慧。要求：朗朗上口，便于记忆。
             """;
 
-    private final DashScopeApi dashScopeApi;
+    private final ChatModelRegistry chatModelRegistry;
     private final BaseCheckpointSaver checkpointSaver;
 
-    /**
-     * 缓存已创建的 Agent，避免重复创建
-     */
     private final Map<String, ReactAgent> agentCache = new ConcurrentHashMap<>();
 
-    public BookAgentFactory(DashScopeApi dashScopeApi,
+    public BookAgentFactory(ChatModelRegistry chatModelRegistry,
                             BaseCheckpointSaver checkpointSaver) {
-        this.dashScopeApi = dashScopeApi;
+        this.chatModelRegistry = chatModelRegistry;
         this.checkpointSaver = checkpointSaver;
     }
 
     /**
      * 获取指定模型的 Agent
-     * 如果缓存中存在则返回缓存的 Agent，否则创建新的
      */
     public ReactAgent getAgent(String modelId) {
         return agentCache.computeIfAbsent(modelId, this::createAgent);
@@ -86,8 +80,7 @@ public class BookAgentFactory {
      * 创建指定模型的 Agent
      */
     private ReactAgent createAgent(String modelId) {
-        // 创建指定模型的 ChatModel
-        ChatModel chatModel = createChatModel(modelId);
+        ChatModel chatModel = chatModelRegistry.getChatModel(modelId);
 
         return ReactAgent.builder()
                 .name("BookAgent-" + modelId)
@@ -99,18 +92,9 @@ public class BookAgentFactory {
     }
 
     /**
-     * 创建指定模型的 ChatModel
+     * 获取 ChatModel（供其他组件使用）
      */
     public ChatModel createChatModel(String modelId) {
-        DashScopeChatOptions options = DashScopeChatOptions.builder()
-                .model(modelId)
-                .temperature(0.7)
-                .build();
-
-        return DashScopeChatModel.builder()
-                .dashScopeApi(dashScopeApi)
-                .defaultOptions(options)
-                .build();
+        return chatModelRegistry.getChatModel(modelId);
     }
-
 }
